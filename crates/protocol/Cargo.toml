@@ -6,3 +6,10 @@ license.workspace = true
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+png = "0.18"
+
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+# minifb's build script requires this feature on Darwin; rendering still uses Metal.
+minifb = { version = "0.29", default-features = false, features = ["x11"] }

@@ -1,2 +1,9 @@
 /target/
 .DS_Store
+.env
+.env.*
+!.env.example
+/private/
+*.local
+__pycache__/
+/catalogue.bin

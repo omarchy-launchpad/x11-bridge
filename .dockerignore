@@ -1,0 +1,10 @@
+**
+!Cargo.toml
+!Cargo.lock
+!crates/
+!crates/**/
+!crates/**/Cargo.toml
+!crates/**/*.rs
+!scripts/
+!scripts/run-container-tests.sh
+!scripts/Dockerfile.xvfb

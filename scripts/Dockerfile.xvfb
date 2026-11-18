@@ -1,0 +1,9 @@
+FROM rust:1.98-bookworm
+RUN apt-get update && apt-get install -y --no-install-recommends xvfb xauth x11-apps xfonts-base openssh-server openssh-client && rm -rf /var/lib/apt/lists/*
+RUN rm -f /etc/ssh/ssh_host_* && useradd --create-home --shell /bin/sh bridge
+WORKDIR /work
+COPY Cargo.toml Cargo.lock ./
+COPY crates ./crates
+COPY scripts/run-container-tests.sh ./scripts/
+RUN cargo build --workspace --all-targets --locked
+CMD ["sh", "scripts/run-container-tests.sh"]

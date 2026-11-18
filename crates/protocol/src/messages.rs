@@ -2,6 +2,10 @@
 use crate::protocol::{Kind, Packet};
 use std::io;
 
+pub const CAP_CAPTURE: u32 = 1;
+pub const CAP_INPUT: u32 = 2;
+pub const MAX_TEXT: usize = 4096;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Input {
     Motion { x: u32, y: u32 },
@@ -52,13 +56,28 @@ fn dimensions(bytes: &[u8]) -> io::Result<(u32, u32)> {
     Ok(size)
 }
 impl Message {
+    /// Decode an owned packet, reusing the pixel allocation for full frames.
+    pub fn from_packet(mut packet: Packet) -> io::Result<Self> {
+        if packet.kind != Kind::Frame {
+            return Self::decode(&packet);
+        }
+        let (width, height, _) = packet.frame()?;
+        packet.payload.copy_within(8.., 0);
+        packet.payload.truncate(packet.payload.len() - 8);
+        Ok(Self::Frame {
+            width,
+            height,
+            rgba: packet.payload,
+        })
+    }
+
     pub fn decode(packet: &Packet) -> io::Result<Self> {
         let p = &packet.payload;
         Ok(match packet.kind {
             Kind::Hello if p.len() == 4 => Self::Hello {
                 capabilities: integer(p, 0)?,
             },
-            Kind::Window if p.len() >= 8 => {
+            Kind::Window if p.len() >= 8 && p.len() <= MAX_TEXT + 8 => {
                 let (width, height) = dimensions(p)?;
                 Self::Window {
                     width,
@@ -77,7 +96,9 @@ impl Message {
             Kind::Destroy if p.is_empty() => Self::Destroy,
             Kind::Pause if p.is_empty() => Self::Pause,
             Kind::Resume if p.is_empty() => Self::Resume,
-            Kind::Error => Self::Error(String::from_utf8(p.clone()).map_err(|_| invalid())?),
+            Kind::Error if p.len() <= MAX_TEXT => {
+                Self::Error(String::from_utf8(p.clone()).map_err(|_| invalid())?)
+            }
             Kind::Input => Self::Input(match p.as_slice() {
                 [0, rest @ ..] if rest.len() == 8 => Input::Motion {
                     x: integer(rest, 0)?,
@@ -158,7 +179,9 @@ impl Message {
             window,
             payload,
         };
-        Self::decode(&packet)?;
+        if packet.kind != Kind::Frame {
+            Self::decode(&packet)?;
+        }
         packet.write(io::sink())?;
         Ok(packet)
     }
@@ -227,6 +250,7 @@ mod tests {
         ] {
             let packet = message.clone().packet(1, 1).unwrap();
             assert_eq!(Message::decode(&packet).unwrap(), message);
+            assert_eq!(Message::from_packet(packet).unwrap(), message);
         }
     }
     #[test]
@@ -236,6 +260,32 @@ mod tests {
         assert!(s.accept(&Message::Pause.packet(1, 3).unwrap()).is_err());
         s.accept(&Message::Destroy.packet(1, 2).unwrap()).unwrap();
         assert!(s.accept(&Message::Resume.packet(1, 2).unwrap()).is_err());
+    }
+    #[test]
+    fn rejects_oversized_and_invalid_text() {
+        assert!(
+            Message::Error("x".repeat(MAX_TEXT + 1))
+                .packet(1, 0)
+                .is_err()
+        );
+        assert!(
+            Message::Window {
+                width: 1,
+                height: 1,
+                title: "x".repeat(MAX_TEXT + 1)
+            }
+            .packet(1, 1)
+            .is_err()
+        );
+        assert!(
+            Message::decode(&Packet {
+                kind: Kind::Error,
+                generation: 1,
+                window: 0,
+                payload: vec![255]
+            })
+            .is_err()
+        );
     }
     #[test]
     fn rejects_malformed_input() {

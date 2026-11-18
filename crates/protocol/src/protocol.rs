@@ -62,6 +62,11 @@ impl Packet {
 
     /// EOF is valid only between packets. Partial headers and bodies are errors.
     pub fn read(mut input: impl Read) -> io::Result<Option<Self>> {
+        Self::read_limited(&mut input, MAX_PAYLOAD)
+    }
+
+    /// Read with a stricter payload bound, before allocating the payload.
+    pub fn read_limited(mut input: impl Read, limit: usize) -> io::Result<Option<Self>> {
         let mut header = [0; HEADER_LEN];
         loop {
             match input.read(&mut header[..1]) {
@@ -88,7 +93,7 @@ impl Packet {
             _ => return Err(invalid("unknown message kind")),
         };
         let size = u32::from_le_bytes(header[8..12].try_into().unwrap()) as usize;
-        if size > MAX_PAYLOAD {
+        if size > MAX_PAYLOAD || size > limit {
             return Err(invalid("oversized payload"));
         }
         let mut packet = Self {
@@ -185,6 +190,18 @@ mod tests {
             bad[offset..offset + replacement.len()].copy_from_slice(&replacement);
             assert!(Packet::read(bad.as_slice()).is_err());
         }
+    }
+    #[test]
+    fn consumer_limit_rejects_before_reading_body() {
+        let mut bytes = Vec::new();
+        sample().write(&mut bytes).unwrap();
+        bytes[8..12].copy_from_slice(&65u32.to_le_bytes());
+        let mut cursor = io::Cursor::new(bytes);
+        assert_eq!(
+            Packet::read_limited(&mut cursor, 64).unwrap_err().kind(),
+            io::ErrorKind::InvalidData
+        );
+        assert_eq!(cursor.position(), HEADER_LEN as u64);
     }
     #[test]
     fn letterbox_and_retina_point_mapping() {

@@ -6,7 +6,7 @@ license.workspace = true
 
 [dependencies]
 x11-bridge-protocol = { path = "../protocol" }
-x11rb = { version = "0.14", default-features = false }
+x11rb = { version = "0.14", default-features = false, features = ["composite", "damage", "xtest"] }
 
 [lints]
 workspace = true
