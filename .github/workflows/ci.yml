@@ -1,0 +1,65 @@
+name: CI and release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    name: Rust (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install Rust components
+        run: rustup update stable --no-self-update && rustup default stable && rustup component add rustfmt clippy
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo test --workspace --locked
+      - run: python3 -m unittest discover -s tests -p 'test_*.py'
+
+  e2e:
+    name: Docker X11 and SSH
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - run: sh scripts/test-docker-e2e.sh
+
+  release:
+    name: Publish Linux release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [rust, e2e]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install Rust
+        run: rustup update stable --no-self-update && rustup default stable
+      - name: Check tag matches workspace version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          version=$(cargo metadata --no-deps --format-version 1 --locked | python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "x11-bridge-agent"))')
+          test "$RELEASE_TAG" = "v$version" || { echo "Tag must match agent version v$version" >&2; exit 1; }
+      - name: Build release archive
+        run: |
+          cargo build --release --locked -p x11-bridge-agent
+          archive=x11-bridge-agent-linux-x86_64.tar.gz
+          tar -czf "$archive" -C target/release x11-bridge-agent -C "$GITHUB_WORKSPACE" README.md LICENSE
+          sha256sum "$archive" > "$archive.sha256"
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: gh release create "$RELEASE_TAG" x11-bridge-agent-linux-x86_64.tar.gz x11-bridge-agent-linux-x86_64.tar.gz.sha256 --verify-tag --generate-notes

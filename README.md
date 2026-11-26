@@ -26,6 +26,14 @@ cargo test --workspace --locked
 cargo clippy --workspace --all-targets --locked -- -D warnings
 ```
 
+GitHub Actions runs these checks on Linux and macOS, the Python runner tests,
+and the Docker X11/SSH end-to-end suite on pushes to `main` and pull requests.
+To publish a Linux x86-64 agent release, set the workspace version in
+`Cargo.toml`, update `Cargo.lock`, and push a matching tag such as `v0.1.0`.
+After all checks pass, Actions creates a GitHub release with the binary archive
+and its SHA-256 checksum. The workflow requires GitHub Actions to have permission
+to write repository contents.
+
 Supply the authenticated session display explicitly. `x11rb` reads Xauthority
 credentials using the standard `XAUTHORITY` environment variable. Never disable
 X authentication. The following variables must be set in your private shell:
