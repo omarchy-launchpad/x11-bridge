@@ -5,9 +5,8 @@ stdin/stdout. No xpra dependency or wire compatibility. Native rendering and SSH
 profile management belong to the consumer.
 
 `x11_bridge_protocol::client` provides catalogue reading, capability negotiation,
-validated frame/lifecycle events and separate read/control handles. See
-[Seams integration](docs/seams-integration.md) for ownership, threading and input
-requirements. The `stream_smoke` example exercises this API end to end.
+validated frame/lifecycle events and separate read/control handles. The
+`stream_smoke` example exercises this API end to end.
 
 The agent captures Composite pixmaps, converts TrueColor pixels to opaque RGBA8,
 tracks Damage and window lifecycle events, and optionally accepts XTEST input.
@@ -74,9 +73,11 @@ Malformed messages, stale identities, unsupported directions and rejected input
 terminate the transport and release held input. Text is limited to 4096 bytes;
 packets are limited to 32 MiB, consumer payloads to 64 bytes.
 
-XTEST is global input. The agent never steals focus. It requires the selected
-window itself to hold keyboard focus, serializes focus checks and injection with
-an X server grab, and checks that buttons land on the selected window. It accepts
+XTEST is global input. Keyboard input and raw `--window` streams require the
+selected window to hold keyboard focus. Desktop-entry viewers can click an
+unfocused X11 window. The agent checks the X11 stacking order at the requested
+point before moving the pointer and checks the actual target before pressing a
+button. These checks and injection run under one X server grab. It accepts
 level-zero keysyms with explicit modifiers and core buttons 1 through 5. Existing
 physical key/button presses are rejected rather than adopted. Held input is
 released on pause, unmap, focus loss, protocol failure and transport EOF.
@@ -131,7 +132,8 @@ separate, unprivileged container user.
 Runtime uses `--network none`; no ports, host directories, SSH agent or host
 desktop are exposed. Build downloads dependencies first, then runtime Cargo runs
 offline. All credentials and X11 resources are disposable. This tests the bridge
-and its Rust consumer, not Seams' AppKit rendering or compositor-specific behavior.
+and its Rust consumer. AppKit rendering in Omarchy Launchpad and
+compositor-specific behavior require separate tests.
 Docker Engine/Desktop is the only host prerequisite. No Omarchy settings required.
 
 `test-docker-e2e.sh` is the Docker entry point. `run-container-tests.sh` is its
@@ -202,5 +204,5 @@ Test runner privacy checks independently:
 python3 -m unittest discover -s tests -p 'test_*.py'
 ```
 
-Clipboard, audio, codecs, persistent reconnect, application launching and native
-macOS rendering are not implemented.
+Clipboard, audio, and codecs are outside the bridge protocol. The consumer
+handles native macOS rendering.

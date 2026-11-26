@@ -23,6 +23,7 @@ pub enum Kind {
     Pause = 6,
     Resume = 7,
     Error = 8,
+    Resize = 9,
 }
 
 fn invalid(message: &str) -> io::Error {
@@ -90,6 +91,7 @@ impl Packet {
             6 => Kind::Pause,
             7 => Kind::Resume,
             8 => Kind::Error,
+            9 => Kind::Resize,
             _ => return Err(invalid("unknown message kind")),
         };
         let size = u32::from_le_bytes(header[8..12].try_into().unwrap()) as usize;

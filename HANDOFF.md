@@ -4,7 +4,8 @@
 
 Create a separate repository named `x11-bridge`. Use Rust and Jujutsu version
 control. This repository will own the reusable remote-window protocol and Linux
-agent. Seams will consume the protocol library and own native macOS rendering.
+agent. Omarchy Launchpad will consume the protocol library and own native
+macOS rendering.
 
 Implement a custom protocol with the window-streaming role currently associated
 with xpra. Do not depend on xpra or claim compatibility with its wire format.
@@ -18,13 +19,13 @@ Use a Cargo workspace with two packages initially:
 - `x11-bridge-agent`: Linux executable that captures selected X11 client windows
   and handles input over stdin/stdout. Protocol data uses stdout; logs use stderr.
 
-A binary alone is not an importable Rust library. Seams depends on the protocol
-crate, starts the agent over system SSH and renders received frames using AppKit.
+Omarchy Launchpad depends on the protocol library, starts the agent over system
+SSH and renders received frames using AppKit.
 Keep rendering, SSH profiles and macOS settings out of the new repository.
 
 ## Existing implementation to extract
 
-In app-seams, `src/protocol.rs` implements bounded, versioned packet framing,
+In omarchy-launchpad, `src/protocol.rs` implements bounded, versioned packet framing,
 RGBA8 frame validation and aspect-fit pointer mapping. `src/messages.rs` defines
 handshake, metadata, frames, input, pause/resume, errors and subscription state.
 `src/lib.rs` exports these modules. Their tests pass locally.
@@ -35,7 +36,7 @@ and complete the protocol before treating it as stable. In particular, define
 capability negotiation, direction/state validation, title/error limits, window
 identity allocation, reconnect generations and input focus/release semantics.
 
-The xpra execution paths and executable chooser were removed from Seams.
+Omarchy Launchpad removed the xpra execution paths and executable chooser.
 Launch currently returns an explicit unavailable error. Saved profiles retain
 legacy display semantics and must not silently become desktop DISPLAY values.
 
@@ -55,7 +56,7 @@ legacy display semantics and must not silently become desktop DISPLAY values.
    physical keycodes with X11 keycodes. Treat global XTEST focus as a constraint.
 7. Test against Xvfb/Xorg and then a real authenticated Linux desktop. Record
    extension versions, capture behavior, transferred bytes and measured latency.
-8. Integrate the library and agent with Seams in a separate consumer change.
+8. Integrate the library and agent with Omarchy Launchpad in a separate change.
 
 Existing X11 applications belong to the user. Disconnect must not kill them or
 terminate the desktop session. Never disable X authentication. Do not add
@@ -77,8 +78,8 @@ must be labelled as fixtures and cannot establish remote acceptance.
 
 ## Current evidence and limitations
 
-app-seams passes 18 tests and Clippy. Two removed tests covered the deleted xpra
-argument construction. No reachable Linux target has been established. No native
+Omarchy Launchpad passes 18 tests and Clippy. Two removed tests covered the
+deleted xpra argument construction. No reachable Linux target has been established. No native
 remote rendering, Xwayland compatibility or performance claims are verified.
 The original HANDOFF.md contains additional capture and lifecycle requirements.
 

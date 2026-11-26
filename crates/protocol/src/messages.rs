@@ -4,6 +4,7 @@ use std::io;
 
 pub const CAP_CAPTURE: u32 = 1;
 pub const CAP_INPUT: u32 = 2;
+pub const CAP_RESIZE: u32 = 4;
 pub const MAX_TEXT: usize = 4096;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -29,6 +30,10 @@ pub enum Message {
         width: u32,
         height: u32,
         rgba: Vec<u8>,
+    },
+    Resize {
+        width: u32,
+        height: u32,
     },
     Input(Input),
     Pause,
@@ -93,6 +98,15 @@ impl Message {
                     rgba: rgba.to_vec(),
                 }
             }
+            Kind::Resize if p.len() == 8 => {
+                let (width, height) = dimensions(p)?;
+                if u64::from(width) * u64::from(height) * 4 + 8
+                    > crate::protocol::MAX_PAYLOAD as u64
+                {
+                    return Err(invalid());
+                }
+                Self::Resize { width, height }
+            }
             Kind::Destroy if p.is_empty() => Self::Destroy,
             Kind::Pause if p.is_empty() => Self::Pause,
             Kind::Resume if p.is_empty() => Self::Resume,
@@ -146,6 +160,11 @@ impl Message {
                 payload.extend(height.to_le_bytes());
                 payload.extend(rgba);
                 Kind::Frame
+            }
+            Self::Resize { width, height } => {
+                payload.extend(width.to_le_bytes());
+                payload.extend(height.to_le_bytes());
+                Kind::Resize
             }
             Self::Destroy => Kind::Destroy,
             Self::Pause => Kind::Pause,

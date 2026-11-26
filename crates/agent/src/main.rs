@@ -1,4 +1,6 @@
 //! Authenticated X11 catalogue and selected-window stdio streaming agent.
+mod appimage;
+mod desktop;
 mod input;
 mod pixels;
 mod stream;
@@ -37,6 +39,9 @@ fn title(connection: &RustConnection, window: u32) -> Result<String> {
 }
 fn run() -> Result<()> {
     let args: Vec<_> = std::env::args().skip(1).collect();
+    if args.first().is_some_and(|a| a == "--desktop") {
+        return desktop::run(&args[1..]);
+    }
     let mut display = None;
     let mut window = None;
     let mut allow_input = false;
@@ -75,7 +80,17 @@ fn run() -> Result<()> {
     std::fs::File::open("/dev/urandom")?.read_exact(&mut nonce)?;
     let generation = u64::from_ne_bytes(nonce).max(1);
     if let Some(window) = window {
-        return stream::run(&connection, root, window, generation, allow_input);
+        return stream::run(
+            &connection,
+            root,
+            window,
+            generation,
+            if allow_input {
+                input::InputMode::Focused
+            } else {
+                input::InputMode::Disabled
+            },
+        );
     }
     let clients = connection
         .intern_atom(false, b"_NET_CLIENT_LIST")?

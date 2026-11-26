@@ -1,7 +1,7 @@
 //! Blocking transport-independent consumer API. Run reads/writes off the UI thread.
 //! Pass owned pipes to `connect`; dropping Controls closes stdin and releases input.
 use crate::{
-    messages::{CAP_CAPTURE, CAP_INPUT, Input, MAX_TEXT, Message},
+    messages::{CAP_CAPTURE, CAP_INPUT, CAP_RESIZE, Input, MAX_TEXT, Message},
     protocol::{Kind, Packet},
 };
 use std::{
@@ -93,11 +93,23 @@ pub fn read_catalogue(mut input: impl Read) -> io::Result<Vec<WindowInfo>> {
 /// The returned halves can live on separate threads. EOF or any protocol error
 /// invalidates both halves. The caller owns transport timeouts and process reaping.
 pub fn connect<R: Read, W: Write>(
-    mut input: R,
-    mut output: W,
+    input: R,
+    output: W,
     capabilities: u32,
 ) -> io::Result<(Events<R>, Controls<W>)> {
-    if capabilities & CAP_CAPTURE == 0 || capabilities & !(CAP_CAPTURE | CAP_INPUT) != 0 {
+    connect_optional(input, output, capabilities, 0)
+}
+
+/// Negotiate optional controls while retaining compatibility with older agents.
+pub fn connect_optional<R: Read, W: Write>(
+    mut input: R,
+    mut output: W,
+    required: u32,
+    optional: u32,
+) -> io::Result<(Events<R>, Controls<W>)> {
+    if required & CAP_CAPTURE == 0
+        || (required | optional) & !(CAP_CAPTURE | CAP_INPUT | CAP_RESIZE) != 0
+    {
         return Err(invalid("invalid requested capabilities"));
     }
     let hello = Packet::read_limited(&mut input, 4)?
@@ -108,9 +120,10 @@ pub fn connect<R: Read, W: Write>(
     else {
         return Err(invalid("expected streaming handshake"));
     };
-    if hello.window != 0 || offered & capabilities != capabilities {
+    if hello.window != 0 || offered & required != required {
         return Err(invalid("agent does not offer requested capabilities"));
     }
+    let capabilities = required | (offered & optional);
     let info = SessionInfo {
         generation: hello.generation,
         capabilities,
@@ -273,6 +286,15 @@ impl<W: Write> Controls<W> {
             }
         }
         self.send(Message::Input(input))
+    }
+    pub fn resize(&mut self, width: u32, height: u32) -> io::Result<()> {
+        if self.info.capabilities & CAP_RESIZE == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "resize unavailable",
+            ));
+        }
+        self.send(Message::Resize { width, height })
     }
     pub fn pause(&mut self) -> io::Result<()> {
         self.set_paused(true)?;

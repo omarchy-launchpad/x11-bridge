@@ -1,4 +1,8 @@
-use crate::{Result, input::InputState, pixels::Layout};
+use crate::{
+    Result,
+    input::{InputMode, InputState},
+    pixels::Layout,
+};
 use std::{
     io::{self, Write},
     sync::{
@@ -10,7 +14,7 @@ use std::{
     time::{Duration, Instant},
 };
 use x11_bridge_protocol::{
-    messages::{CAP_CAPTURE, CAP_INPUT, Message},
+    messages::{CAP_CAPTURE, CAP_INPUT, CAP_RESIZE, Message},
     protocol::{MAX_PAYLOAD, Packet},
 };
 use x11rb::{
@@ -146,7 +150,7 @@ pub fn run(
     root: u32,
     window: u32,
     generation: u64,
-    allow_input: bool,
+    input_mode: InputMode,
 ) -> Result<()> {
     if window == root {
         return Err("select a client window, not the root".into());
@@ -159,6 +163,7 @@ pub fn run(
     if damage.major_version < 1 {
         return Err("Damage 1.0 required".into());
     }
+    let allow_input = input_mode != InputMode::Disabled;
     if allow_input {
         c.xtest_get_version(2, 2)?.reply()?;
     }
@@ -177,8 +182,13 @@ pub fn run(
     )?
     .check()?;
     let capture = Capture::new(c, window)?;
-    let mut input = InputState::new(c, window, root);
-    let capabilities = CAP_CAPTURE | if allow_input { CAP_INPUT } else { 0 };
+    let mut input = InputState::new(c, window, root, input_mode);
+    let capabilities = CAP_CAPTURE
+        | if allow_input {
+            CAP_INPUT | CAP_RESIZE
+        } else {
+            0
+        };
     let mailbox: Mailbox = Arc::new((Mutex::new(None), Condvar::new()));
     let output_failed = Arc::new(AtomicBool::new(false));
     let writer = {
@@ -226,6 +236,7 @@ pub fn run(
         }
     });
     let mut negotiated = false;
+    let mut negotiated_resize = false;
     let mut negotiated_input = false;
     let mut capture_failures = 0;
     let mut paused = false;
@@ -248,6 +259,7 @@ pub fn run(
                         {
                             return Err("expected compatible consumer handshake".into());
                         }
+                        negotiated_resize = matches!(message, Message::Hello {capabilities: flags} if flags & CAP_RESIZE != 0);
                         negotiated_input = matches!(message, Message::Hello {capabilities: flags} if flags & CAP_INPUT != 0);
                         negotiated = true;
                         continue;
@@ -256,6 +268,16 @@ pub fn run(
                         return Err("stale window identity".into());
                     }
                     match message {
+                        Message::Resize { width, height } if negotiated_resize && !paused => {
+                            if crate::desktop::resize_hyprland(c, root, window, width, height)? {
+                                continue;
+                            }
+                            c.configure_window(
+                                window,
+                                &ConfigureWindowAux::new().width(width).height(height),
+                            )?
+                            .check()?;
+                        }
                         Message::Pause => {
                             paused = true;
                             input.release()?;
@@ -326,7 +348,7 @@ pub fn run(
                 _ => {}
             }
         }
-        if allow_input && !input.focused()? {
+        if input.needs_focus() && !input.focused()? {
             input.release()?;
         }
         if negotiated && dirty && !paused && last_frame.elapsed() >= Duration::from_millis(33) {

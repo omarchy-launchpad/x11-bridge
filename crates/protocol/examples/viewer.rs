@@ -1,5 +1,5 @@
 //! Small macOS viewer for the bridge's Docker GUI demo. AppKit integration for
-//! Seams remains separate; this example only displays pixels and forwards input.
+//! Omarchy Launchpad remains separate; this example only displays pixels and forwards input.
 #[cfg(target_os = "macos")]
 mod mac {
     use minifb::{Key, KeyRepeat, MouseButton, MouseMode, ScaleMode, Window, WindowOptions};
@@ -267,7 +267,12 @@ mod mac {
                 {
                     let pressed = window.get_mouse_down(button);
                     if pressed != buttons[i] {
-                        if pressed {eprintln!("[DEBUG-pointer] size={size:?} raw={:?} mapped={point:?}", window.get_mouse_pos(MouseMode::Discard));}
+                        if pressed {
+                            eprintln!(
+                                "[DEBUG-pointer] size={size:?} raw={:?} mapped={point:?}",
+                                window.get_mouse_pos(MouseMode::Discard)
+                            );
+                        }
                         batch.push(Input::Button {
                             button: i as u8 + 1,
                             pressed,

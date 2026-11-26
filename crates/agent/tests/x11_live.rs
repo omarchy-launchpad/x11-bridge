@@ -123,7 +123,14 @@ impl Agent {
         let caps = CAP_CAPTURE | if input { CAP_INPUT } else { 0 };
         assert_eq!(
             Message::decode(&hello).unwrap(),
-            Message::Hello { capabilities: caps }
+            Message::Hello {
+                capabilities: caps
+                    | if input {
+                        x11_bridge_protocol::messages::CAP_RESIZE
+                    } else {
+                        0
+                    }
+            }
         );
         agent.send_at(Message::Hello { capabilities: caps }, 0, agent.generation);
         agent
@@ -340,6 +347,7 @@ fn targeted_input_and_held_key_cleanup() {
                     .unwrap()
                     .check()
                     .unwrap();
+                agent.send(Message::Input(Input::Motion { x: 10, y: 10 }));
             }
             "unmap" => {
                 f.c.unmap_window(f.window).unwrap().check().unwrap();
